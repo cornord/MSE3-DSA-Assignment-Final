@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Blantyre School Road Network – Dijkstra Demo</title>
+<style>
+:root{box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);
+--bg:#f7f6f2;--card:#fff;--text:#1d1d1b;--muted:#5f5e5a;--line:#d9d6cc;--accent:#0f6e56;--hi:#e1f5ee;color-scheme:light}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#1a1a18;--card:#262624;--text:#eeece4;--muted:#a8a69e;--line:#3d3d3a;--accent:#5dcaa5;--hi:#0f3d31;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#1a1a18;--card:#262624;--text:#eeece4;--muted:#a8a69e;--line:#3d3d3a;--accent:#5dcaa5;--hi:#0f3d31;color-scheme:dark}
+*,*::before,*::after{box-sizing:inherit}
+body{margin:0;background:var(--bg);color:var(--text);font:16px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+main{max-width:860px;margin:0 auto;padding:20px 16px 40px}
+h1{font-size:1.4rem;margin:0 0 4px}h2{font-size:1.05rem;margin:0 0 10px}
+p.sub{color:var(--muted);margin:0 0 16px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px;margin-bottom:14px}
+.row{display:flex;flex-wrap:wrap;gap:12px;align-items:end}
+label{display:flex;flex-direction:column;font-size:.85rem;color:var(--muted);gap:4px;flex:1 1 220px}
+select,button{font:inherit;padding:9px 10px;border-radius:8px;border:1px solid var(--line);background:var(--card);color:var(--text)}
+button{cursor:pointer}button.primary{background:var(--accent);color:var(--bg);border-color:var(--accent);font-weight:600}
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}.chips button{font-size:.85rem;padding:6px 10px}
+.scroll{overflow-x:auto}table{border-collapse:collapse;width:100%;font-size:.88rem}
+th,td{border-bottom:1px solid var(--line);padding:6px 8px;text-align:left;white-space:nowrap}
+tr.onpath td{background:var(--hi);font-weight:600}
+.result{font-size:1.05rem}.path{color:var(--accent);font-weight:700}
+.err{color:#c0392b;font-weight:600}
+</style>
+</head>
+<body>
+<main>
+<h1>Blantyre School Road Network</h1>
+<p class="sub">Dijkstra’s shortest-path algorithm on a weighted, undirected graph of 20 secondary schools (A–T). Distances are in km. No installation needed.</p>
+
+<div class="card">
+<h2>Find a shortest path</h2>
+<div class="row">
+<label>From<select id="src"></select></label>
+<label>To<select id="dst"></select></label>
+<button class="primary" id="go">Run Dijkstra</button>
+</div>
+<div class="chips" id="chips"></div>
+</div>
+
+<div class="card" id="out" hidden>
+<h2>Result</h2>
+<div class="result" id="summary"></div>
+</div>
+
+<div class="card" id="stepsCard" hidden>
+<h2>Step-by-step working</h2>
+<div class="scroll"><table id="steps"></table></div>
+</div>
+
+<div class="card" id="tblCard" hidden>
+<h2>Final distance and predecessor table</h2>
+<div class="scroll"><table id="tbl"></table></div>
+</div>
+
+<div class="card">
+<h2>Vertices</h2>
+<div class="scroll"><table id="verts"></table></div>
+</div>
+<div class="card">
+<h2>Edges (road connections)</h2>
+<div class="scroll"><table id="edges"></table></div>
+</div>
+<p class="sub">This page is a JavaScript version of the same algorithm used in our C++ program, and it uses the same graph.</p>
+</main>
+<script>
+var N=20,INF=999999;
+var names=["Blantyre Secondary","Chichiri Secondary","Limbe Secondary","Zingwangwa Secondary","Soche Hill Secondary","Ndirande Hill Secondary","Njamba Secondary","Bangwe Secondary","South Lunzu CDSS","Lunzu Secondary","St Kizito CDSS","St Louis Secondary","Our Lady of Wisdom Secondary","Nyambadwe CDSS","Namiwawa CDSS","Chirimba CDSS","Mpingwe CDSS","Machinjiri Secondary","Mpemba Secondary","Ngumbe CDSS"];
+var E=[[0,1,1],[0,2,2],[1,2,3],[1,3,4],[2,3,4],[2,7,8],[3,4,5],[4,6,3],[4,7,5],[7,6,5],[7,5,13],[7,11,14],[6,5,7],[5,10,3],[5,8,8],[8,10,12],[8,15,13],[8,9,3],[9,11,3],[9,12,1],[11,13,1],[11,12,4],[15,14,2],[15,12,3],[15,16,4],[13,16,15],[10,19,8],[19,18,5],[18,17,7],[17,14,6],[14,16,1]];
+var g=[];for(var i=0;i<N;i++){g.push([]);for(var j=0;j<N;j++)g[i].push(INF);}
+E.forEach(function(e){g[e[0]][e[1]]=e[2];g[e[1]][e[0]]=e[2];});
+function L(i){return String.fromCharCode(65+i);}
+function opt(i){return "<option value='"+i+"'>"+L(i)+" – "+names[i]+"</option>";}
+var src=document.getElementById("src"),dst=document.getElementById("dst");
+for(var i=0;i<N;i++){src.insertAdjacentHTML("beforeend",opt(i));dst.insertAdjacentHTML("beforeend",opt(i));}
+dst.value=11;
+
+function dijkstra(s,d){
+  var dist=[],pred=[],vis=[],steps=[];
+  for(var i=0;i<N;i++){dist.push(INF);pred.push(-1);vis.push(false);}
+  dist[s]=0;
+  for(var c=0;c<N;c++){
+    var u=-1,m=INF;
+    for(var i=0;i<N;i++)if(!vis[i]&&dist[i]<m){m=dist[i];u=i;}
+    if(u===-1)break;
+    vis[u]=true;
+    var upd=[];
+    if(u!==d){
+      for(var v=0;v<N;v++){
+        if(g[u][v]!==INF&&!vis[v]){
+          var nl=dist[u]+g[u][v];
+          if(nl<dist[v]){dist[v]=nl;pred[v]=u;upd.push(L(v)+"="+nl);}
+        }
+      }
+    }
+    steps.push({n:c+1,u:u,d:dist[u],upd:upd,stop:u===d});
+    if(u===d)break;
+  }
+  return {dist:dist,pred:pred,steps:steps};
+}
+
+function run(s,d){
+  var r=dijkstra(s,d),sm=document.getElementById("summary");
+  document.getElementById("out").hidden=false;
+  if(r.dist[d]===INF){
+    sm.innerHTML="<span class='err'>No route exists from "+L(s)+" to "+L(d)+".</span>";
+    document.getElementById("stepsCard").hidden=true;document.getElementById("tblCard").hidden=true;return;
+  }
+  var p=[],c=d;while(c!==-1){p.push(c);c=r.pred[c];}p.reverse();
+  var on={};p.forEach(function(x){on[x]=1;});
+  sm.innerHTML="Shortest distance from <b>"+L(s)+"</b> ("+names[s]+") to <b>"+L(d)+"</b> ("+names[d]+"): <b>"+r.dist[d]+" km</b><br>Shortest path: <span class='path'>"+p.map(L).join(" → ")+"</span><br><small>"+p.map(function(x){return names[x];}).join(" → ")+"</small>";
+  var h="<tr><th>Step</th><th>Vertex chosen</th><th>Distance</th><th>Distances updated</th></tr>";
+  r.steps.forEach(function(t){h+="<tr><td>"+t.n+"</td><td>"+L(t.u)+"</td><td>"+t.d+"</td><td>"+(t.stop?"Destination reached – stop":(t.upd.join(", ")||"none"))+"</td></tr>";});
+  document.getElementById("steps").innerHTML=h;
+  var t="<tr><th>Vertex</th><th>Distance</th><th>Predecessor</th></tr>";
+  for(var i=0;i<N;i++)t+="<tr"+(on[i]?" class='onpath'":"")+"><td>"+L(i)+"</td><td>"+(r.dist[i]===INF?"INF":r.dist[i])+"</td><td>"+(r.pred[i]===-1?"-":L(r.pred[i]))+"</td></tr>";
+  document.getElementById("tbl").innerHTML=t;
+  document.getElementById("stepsCard").hidden=false;document.getElementById("tblCard").hidden=false;
+}
+document.getElementById("go").onclick=function(){run(+src.value,+dst.value);};
+
+var tests=[["Test 1: A→L",0,11],["Test 2: A→A",0,0],["Test 3: H→F",7,5],["Test 4: A→T",0,19],["Test 5: K→Q",10,16],["Test 7: A→B",0,1]];
+tests.forEach(function(t){var b=document.createElement("button");b.textContent=t[0];b.onclick=function(){src.value=t[1];dst.value=t[2];run(t[1],t[2]);};document.getElementById("chips").appendChild(b);});
+
+var v="<tr><th>Vertex</th><th>School</th></tr>";for(var i=0;i<N;i++)v+="<tr><td>"+L(i)+"</td><td>"+names[i]+"</td></tr>";
+document.getElementById("verts").innerHTML=v;
+var e="<tr><th>Edge</th><th>Distance (km)</th></tr>";E.forEach(function(x){e+="<tr><td>"+L(x[0])+" – "+L(x[1])+"</td><td>"+x[2]+"</td></tr>";});
+document.getElementById("edges").innerHTML=e;
+</script>
+</body>
+</html>
